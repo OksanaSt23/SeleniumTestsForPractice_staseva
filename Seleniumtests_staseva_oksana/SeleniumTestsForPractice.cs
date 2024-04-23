@@ -1,14 +1,6 @@
-﻿using FluentAssertions;
-using FluentAssertions.Primitives;
-using Microsoft.VisualBasic;
-using NUnit.Framework;
-using NUnit.Framework.Internal;
+﻿using NUnit.Framework;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
-using OpenQA.Selenium.DevTools.V121.Autofill;
-using OpenQA.Selenium.DevTools.V121.CSS;
-using OpenQA.Selenium.DevTools.V121.SystemInfo;
-using OpenQA.Selenium.Internal.Logging;
 using OpenQA.Selenium.Support.UI;
 using SeleniumExtras.WaitHelpers;
 using Size = System.Drawing.Size;
@@ -19,6 +11,7 @@ public class SeleniumTestsForPractice
 {
 
     public ChromeDriver driver;
+    protected WebDriverWait wait;
 
     [SetUp]
     public void SetUp()
@@ -27,11 +20,13 @@ public class SeleniumTestsForPractice
         options.AddArguments("--no-sandbox", "--start-maximized", "--disable-extensions");
 
         driver = new ChromeDriver(options);
-        driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(3); // неявное ожидание
+
+        wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5)); 
+        driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(3); 
         
-        Autorization();      
+        Autorization();  
     }
-    public void Autorization() //вынесли авторизацию отдельным методом
+    public void Autorization() 
     {
         driver.Navigate().GoToUrl("https://staff-testing.testkontur.ru");
 
@@ -43,14 +38,16 @@ public class SeleniumTestsForPractice
 
         var enter = driver.FindElement(By.Name("button"));
         enter.Click();
-        driver.FindElement(By.CssSelector("[data-tid='Title']")); //вынесла эту строчку сюда, так как она нужна мне в 4 тестах
+
+        wait.Until(ExpectedConditions.ElementIsVisible(By.CssSelector("[data-tid='Title']")));
     }
 
     [Test]
     public void Authorization()
     {
         var currentUrl = driver.Url;
-        currentUrl.Should().Be("https://staff-testing.testkontur.ru/news");
+        Assert.That(currentUrl == "https://staff-testing.testkontur.ru/news",
+            "current url = " + currentUrl + ", а должен быть https://staff-testing.testkontur.ru/news");
     }
 
     [Test]
@@ -76,56 +73,51 @@ public class SeleniumTestsForPractice
         member.Click();
         
         var currentUrl = driver.Url;
-        currentUrl.Should().Be("https://staff-testing.testkontur.ru/communities?activeTab=isMember");
+        Assert.That(currentUrl == "https://staff-testing.testkontur.ru/communities?activeTab=isMember",
+            "current url = " + currentUrl + ", а должен быть https://staff-testing.testkontur.ru/communities?activeTab=isMember");
     }
     
     [Test]
     public void EditProfileWorkAddress()
     {
         driver.Navigate().GoToUrl("https://staff-testing.testkontur.ru/profile/settings/edit");
-        //var address = driver.FindElement(By.ClassName("react-ui-1l5eu5f")); решила попробовать зацепиться через родительские (см.ниже)
-        var workaddress = driver.FindElement(By.CssSelector("[data-tid='Address']"));
-        var address = workaddress.FindElement(By.CssSelector("[data-tid='Input']"));
-        //address.Click();
-        //address.Clear(); не работает, хотела предварительно очистить поле для ввода
-        //address.SendKeys(Keys.Clear); тоже не работает
-        //address.SendKeys(Keys.Delete); тоже не работает
-        //address.SendKeys("\b\b\b\b\b\b"); костыль с backspace тоже не работает
+        var address = driver.FindElement(By.CssSelector("[data-tid='Address'] [data-tid='Input']"));
+        address.SendKeys(Keys.Control + "a");
+        address.SendKeys(Keys.Delete);
         address.SendKeys("Санкт-Петербург");
         var save = driver.FindElement(By.XPath("//button[text()='Сохранить']"));
         save.Click();
 
-        // Проверка, что выбранный элемент отображается на странице
-        var searchcity = driver.FindElement(By.XPath("//div[text()='Санкт-Петербург']")); //не подцепиться никак(
-        string selectedText = searchcity.GetAttribute("value");
-        if (selectedText == "Санкт-Петербург")
-        {
-            Console.WriteLine("Тест успешно пройден!");
-        }
-        else
-        {
-            Console.WriteLine("Тест не пройден! Значение 'Санкт-Петербург' не найдено!");
-        }
+        var searchcity = driver
+            .FindElement(By.CssSelector("[data-tid='ContactCard']"))
+            .FindElement(By.XPath("//*[text()='Санкт-Петербург']"));
+        
+        var expectedCityText = "Санкт-Петербург";
+        var actualCityText = searchcity.Text;
+        
+        Assert.That(expectedCityText == actualCityText,
+            $"current text = {actualCityText}, а должен быть {expectedCityText}");
     }
-    
     
     [Test]
     public void AddCommunities()
     {
-        //driver.FindElement(By.CssSelector("[data-tid='Title']"));
         driver.Navigate().GoToUrl("https://staff-testing.testkontur.ru/communities");
         var addcommunities = driver.FindElement(By.XPath("//button[text()='СОЗДАТЬ']"));
         addcommunities.Click();
+        
+        var communityName = $"Сообщество {Guid.NewGuid()}";
+        
         var namecommunities = driver.FindElement(By.CssSelector("[data-tid='Name']"));
-        namecommunities.SendKeys("Сообщество любителей автотестов");
+        namecommunities.SendKeys(communityName);
+        
         var messagecommunities = driver.FindElement(By.CssSelector("[data-tid='Message']"));
         messagecommunities.SendKeys("Hi)");
         var buttoncreate = driver.FindElement(By.CssSelector("[data-tid='CreateButton']"));
         buttoncreate.Click();
         var buttonclose = driver.FindElement(By.XPath("//button[text()='Закрыть']"));
         buttonclose.Click();
-        Assert.That(driver.FindElement(By.XPath("//div[text()='Сообщество любителей автотестов']")).Text is("Сообщество любителей автотестов"));
-         // здесь пыталась проверить, что название Сообщества соответствует тому, что я вводила при его создании
+        Assert.That(driver.FindElement(By.XPath($"//div[text()='{communityName}']")).Text == communityName);
     }
     
     
